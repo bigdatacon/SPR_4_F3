@@ -70,26 +70,30 @@ class MultimodalModel(nn.Module):
         group_dim = 8
         extra_dim = 1  # avg_cal
 
-        if fusion_type in ["concat", "multiply"]:
+        if fusion_type == "concat":
             in_dim = text_dim + img_dim + extra_dim + group_dim
-            self.head = nn.Sequential(
-                nn.Linear(in_dim, Config.EMB_DIM),
-                nn.ReLU(),
-                nn.Dropout(Config.DROPOUT),
-                nn.Linear(Config.EMB_DIM, 1)
-            )
+
+        elif fusion_type == "multiply":
+            # проекция изображения в размерность текста
+            self.i_proj = nn.Linear(img_dim, text_dim)
+            in_dim = text_dim + extra_dim + group_dim
+
         elif fusion_type == "cross_attention":
             # Cross-attention: текст как query, изображение как key/value
-            self.i_proj = nn.Linear(img_dim, text_dim)
-            self.attention = nn.MultiheadAttention(embed_dim=text_dim, num_heads=4, batch_first=True)
-            self.head = nn.Sequential(
-                nn.Linear(text_dim + extra_dim + group_dim, Config.EMB_DIM),
-                nn.ReLU(),
-                nn.Dropout(Config.DROPOUT),
-                nn.Linear(Config.EMB_DIM, 1)
-            )
+            self.t_proj = nn.Linear(text_dim, 256)
+            self.i_proj = nn.Linear(img_dim, 256)
+            self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=4, batch_first=True)
+            in_dim = 256 + extra_dim + group_dim
+
         else:
             raise ValueError("Unknown fusion_type")
+
+        self.head = nn.Sequential(
+            nn.Linear(in_dim, Config.EMB_DIM),
+            nn.ReLU(),
+            nn.Dropout(Config.DROPOUT),
+            nn.Linear(Config.EMB_DIM, 1)
+        )
 
     def forward(self, input_ids, attention_mask, image, avg_cal, group):
         t = self.text(input_ids, attention_mask).pooler_output  # [B, text_dim]
@@ -99,18 +103,17 @@ class MultimodalModel(nn.Module):
 
         if self.fusion_type == "concat":
             x = torch.cat([t, i, avg_cal, g], dim=1)
+
         elif self.fusion_type == "multiply":
-            i_proj = nn.Linear(i.size(1), t.size(1)).to(i.device)(i)
+            i_proj = self.i_proj(i)
             x = t * i_proj  # Hadamard product
             x = torch.cat([x, avg_cal, g], dim=1)
+
         elif self.fusion_type == "cross_attention":
-            i_proj = self.i_proj(i)
-            t_exp = t.unsqueeze(1)
-            i_exp = i_proj.unsqueeze(1)
-            attn_out, _ = self.attention(query=t_exp, key=i_exp, value=i_exp)
+            t_proj = self.t_proj(t).unsqueeze(1)   # [B, 1, 256]
+            i_proj = self.i_proj(i).unsqueeze(1)   # [B, 1, 256]
+            attn_out, _ = self.attention(query=t_proj, key=i_proj, value=i_proj)
             x = torch.cat([attn_out.squeeze(1), avg_cal, g], dim=1)
-        else:
-            raise ValueError("Unknown fusion_type")
 
         out = self.head(x).squeeze(1)
 
@@ -120,7 +123,9 @@ class MultimodalModel(nn.Module):
             mask = (group == GROUP2ID.get(g_name, -1))
             if mask.any():
                 out[mask] = out[mask].clamp(max=clip_val)
+
         return out
+
 
 
 if __name__ == "__main__":
