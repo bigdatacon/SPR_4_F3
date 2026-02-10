@@ -8,7 +8,7 @@ class Config:
     TEXT_LR = 3e-5
     IMAGE_LR = 1e-4
     HEAD_LR = 5e-4
-    EPOCHS = 10
+    EPOCHS = 15
     DROPOUT = 0.1
     EMB_DIM = 256
 

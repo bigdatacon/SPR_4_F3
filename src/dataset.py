@@ -44,55 +44,32 @@ def detect_group(ingr):
 GROUP2ID = {g:i for i,g in enumerate(GROUPS.keys())}
 GROUP2ID["other"] = len(GROUP2ID)
 
-# -------------------------
-# Transforms Function
-# -------------------------
-# def get_transforms(config, ds_type="train"):
-#     # cfg = timm.get_pretrained_cfg(config.IMAGE_MODEL_NAME)
-#     cfg = timm.get_pretrained_cfg(getattr(config, "IMAGE_MODEL_NAME", "tf_efficientnet_b0"))
-#     if ds_type == "train":
-#         return A.Compose([
-#             A.SmallestMaxSize(max_size=max(cfg.input_size[1], cfg.input_size[2])),
-#             A.RandomCrop(cfg.input_size[1], cfg.input_size[2]),
-#             A.HorizontalFlip(p=0.5),
-#             A.ColorJitter(0.2,0.2,0.2,0.1),
-#             A.Normalize(mean=cfg.mean, std=cfg.std),
-#             ToTensorV2()
-#         ])
-#     else:
-#         return A.Compose([
-#             A.SmallestMaxSize(max_size=max(cfg.input_size[1], cfg.input_size[2])),
-#             A.CenterCrop(cfg.input_size[1], cfg.input_size[2]),
-#             A.Normalize(mean=cfg.mean, std=cfg.std),
-#             ToTensorV2()
-#         ])
     
 def get_transforms(config, ds_type="train"):
-    """
-    Возвращает трансформации для датасета.
-    train -> Resize + Normalize + ToTensorV2 (можно добавить аугментации)
-    test  -> Resize + Normalize + ToTensorV2
-    """
+    cfg = timm.get_pretrained_cfg(config.IMAGE_MODEL_NAME)
     if ds_type == "train":
         return A.Compose([
             A.Resize(224, 224),
-            # Можно добавить аугментации, например:
-            # A.HorizontalFlip(p=0.5),
-            # A.ColorJitter(0.2, 0.2, 0.2, 0.1),
+
+            A.RandomCrop(cfg.input_size[1], cfg.input_size[2]),  #добавил
+            A.ColorJitter(0.2,0.2,0.2,0.1),
+
+            A.HorizontalFlip(p=0.5),
+            A.ColorJitter(0.2, 0.2, 0.2, 0.1),
             A.Normalize(),
             ToTensorV2()
         ])
     else:
         return A.Compose([
+            A.SmallestMaxSize(max_size=max(cfg.input_size[1], cfg.input_size[2])),  #добавил
+            A.CenterCrop(cfg.input_size[1], cfg.input_size[2]),
+
             A.Resize(224, 224),
             A.Normalize(),
             ToTensorV2()
         ])
 
 
-# -------------------------
-# Dataset Class
-# -------------------------
 class MultimodalDataset(Dataset):
     def __init__(self, df, transforms):
         self.df = df.reset_index(drop=True)
@@ -114,7 +91,17 @@ class MultimodalDataset(Dataset):
         img = self.transforms(image=np.array(img))["image"]
         mass = torch.tensor(r["total_mass"], dtype=torch.float32)
 
+        # return {
+        #     "text": text,
+        #     "image": img,
+        #     "label": label,
+        #     "avg_cal": avg_cal,
+        #     "group": group_id,
+        #     "mass": mass
+        # }
+
         return {
+            "dish_id": r["dish_id"],
             "text": text,
             "image": img,
             "label": label,
@@ -123,27 +110,26 @@ class MultimodalDataset(Dataset):
             "mass": mass
         }
 
-# -------------------------
-# Collate Function
-# -------------------------
-# def collate_fn(batch, tokenizer):
-#     texts = [b["text"] for b in batch]
-#     tokens = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
 
-#     return {
-#         "input_ids": tokens["input_ids"],
-#         "attention_mask": tokens["attention_mask"],
-#         "image": torch.stack([b["image"] for b in batch]),
-#         "label": torch.stack([b["label"] for b in batch]),
-#         "avg_cal": torch.stack([b["avg_cal"] for b in batch]),
-#         "group": torch.stack([b["group"] for b in batch]),
-#         # "mass": torch.stack([b["mass"] for b in batch])
-#         "mass": torch.stack([b["mass"] for b in batch])  # ← обязательно
-#     }
+
+
+
 def collate_fn(batch, tokenizer):
     texts = [b["text"] for b in batch]
     tokens = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    # result = {
+    #     "input_ids": tokens["input_ids"],
+    #     "attention_mask": tokens["attention_mask"],
+    #     "image": torch.stack([b["image"] for b in batch]),
+    #     "label": torch.stack([b["label"] for b in batch]),
+    #     "avg_cal": torch.stack([b["avg_cal"] for b in batch]),
+    #     "group": torch.stack([b["group"] for b in batch]),
+    #     "mass": torch.stack([b["mass"] for b in batch])
+    # }
+
     result = {
+        "dish_id": [b["dish_id"] for b in batch],
+        "text": [b["text"] for b in batch],
         "input_ids": tokens["input_ids"],
         "attention_mask": tokens["attention_mask"],
         "image": torch.stack([b["image"] for b in batch]),
@@ -152,47 +138,13 @@ def collate_fn(batch, tokenizer):
         "group": torch.stack([b["group"] for b in batch]),
         "mass": torch.stack([b["mass"] for b in batch])
     }
+
+
     # print("Collate batch keys:", result.keys())  # ← для проверки
     return result
 
 
-
-#Не учитываем калорийность неизвестных ингридиентов, а берем среднее по известным
-# def avg_ingr_cal(ingr_str):
-#     ids = ingr_str.split(";")
-#     known = [ingr_cal[i] for i in ids if i in ingr_cal]
-#     if len(known) > 0:
-#         return np.mean(known)
-#     groups = [detect_group(i) for i in ids]
-#     return {
-#         "meat": 2.5,
-#         "grain": 1.3,
-#         "vegetable": 0.4,
-#         "fruit": 0.6,
-#         "sauce": 3.5,
-#         "water": 0.0
-#     }.get(groups[0], 1.0)
-
-
-"""Функция которая берет среднюю калорийность по известным ингредиентам, а для неизвестных использует среднее по группе."""
-# def avg_ingr_cal(ingr_str): #Учитываем неизвестные из общедоступных средних данных
-#     ids = ingr_str.split(";")
-#     cal_values = []
-#     for i in ids:
-#         if i in ingr_cal:
-#             cal_values.append(ingr_cal[i])
-#         else:
-#             group = detect_group(i)
-#             cal_values.append({
-#                 "meat": 2.5,
-#                 "grain": 1.3,
-#                 "vegetable": 0.4,
-#                 "fruit": 0.6,
-#                 "sauce": 3.5,
-#                 "water": 0.0
-#             }.get(group, 1.0))
-#     return np.mean(cal_values)
-
+"Берем калорийность ингредиентов из блюд, в которых только 1 ингредиент, и усредняем по этому ингредиенту. Если ингредиента нет в этих блюдах, то определяем его группу и используем среднюю калорийность по группе."
 def avg_ingr_cal(ingr_str, ingr_cal): 
     ids = ingr_str.split(";")
     cal_values = []
@@ -210,44 +162,23 @@ def avg_ingr_cal(ingr_str, ingr_cal):
                 "water": 0.0
             }.get(group, 1.0))
     return torch.tensor(cal_values, dtype=torch.float32).mean().item()
-    # return float(np.mean(cal_values))
+
 
 
 df_all = pd.read_csv(Config.DATA_CSV)
 df_train = df_all[df_all["split"] == "train"].reset_index(drop=True)
 df_test  = df_all[df_all["split"] == "test"].reset_index(drop=True)
 
-# -------------------------
-# Build Ingredient Cal Dict
-# -------------------------
+
 single = df_train[df_train["ingredients"].str.count(";") == 0].copy()
 single["cal_per_g"] = single["total_calories"] / single["total_mass"]
 ingr_cal = {r["ingredients"]: r["cal_per_g"] for _, r in single.iterrows()}
-# -------------------------
-# MAIN
-# -------------------------
+
 if __name__ == "__main__":
     # Проверяем CSV
     print("CSV path:", Config.DATA_CSV)
     print("Exists:", os.path.exists(Config.DATA_CSV))
 
-    # df_all = pd.read_csv(Config.DATA_CSV)
-    # df_train = df_all[df_all["split"] == "train"].reset_index(drop=True)
-    # df_test  = df_all[df_all["split"] == "test"].reset_index(drop=True)
-
-    # # -------------------------
-    # # Build Ingredient Cal Dict
-    # # -------------------------
-    # single = df_train[df_train["ingredients"].str.count(";") == 0].copy()
-    # single["cal_per_g"] = single["total_calories"] / single["total_mass"]
-    # ingr_cal = {r["ingredients"]: r["cal_per_g"] for _, r in single.iterrows()}
-
-
-
-
-    # -------------------------
-    # Apply Calculations & Create Datasets
-    # -------------------------
     for df, ds_type in zip([df_train, df_test], ["train", "test"]):
         # df["avg_ingr_cal"] = df["ingredients"].apply(avg_ingr_cal)
         df["avg_ingr_cal"] = df["ingredients"].apply(lambda x: avg_ingr_cal(x, ingr_cal))
@@ -258,6 +189,13 @@ if __name__ == "__main__":
         sample = dataset[0]
         print(f"Sample from {ds_type} dataset:", sample)
         print(f" sample[mass] : {sample['mass']} ")  # масса блюда в 
+
+        b = next(iter(df.iterrows()))[1]
+        print(b["dish_id"][:2])
+        print(b["ingredients"][:50])
+        print("ok")
+
+
 
 
 

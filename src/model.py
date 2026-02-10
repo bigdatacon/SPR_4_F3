@@ -24,34 +24,6 @@ parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 from Config import Config
 
-# class MultimodalModel(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-#         self.text = AutoModel.from_pretrained(Config.TEXT_MODEL_NAME)
-#         self.image = timm.create_model(Config.IMAGE_MODEL_NAME, pretrained=True, num_classes=0)
-#         self.group_emb = nn.Embedding(len(GROUP2ID), 8)
-
-#         in_dim = self.text.config.hidden_size + self.image.num_features + 1 + 8
-#         self.head = nn.Sequential(
-#             nn.Linear(in_dim, Config.EMB_DIM),
-#             nn.ReLU(),
-#             nn.Dropout(Config.DROPOUT),
-#             nn.Linear(Config.EMB_DIM, 1)
-#         )
-
-#     def forward(self, input_ids, attention_mask, image, avg_cal, group):
-#         t = self.text(input_ids, attention_mask).pooler_output
-#         i = self.image(image)
-#         g = self.group_emb(group)
-#         x = torch.cat([t, i, avg_cal.unsqueeze(1), g], dim=1)
-#         out = self.head(x).squeeze(1)
-#         # ===== CLIP по категории =====
-#         for g_name, clip_val in {"meat": 600, "grain": 400, "vegetable": 150,
-#                                  "fruit": 200, "sauce": 30, "water": 0, "drink": 300}.items(): #Соус огранчиичваю на 100г в 20 раз так как его мало, то есть вместо 500 - 30
-#             mask = (group == GROUP2ID.get(g_name, -1))
-#             if mask.any():
-#                 out[mask] = out[mask].clamp(max=clip_val)
-#         return out
     
 class MultimodalModel(nn.Module):
     def __init__(self, fusion_type="concat"):
@@ -96,17 +68,17 @@ class MultimodalModel(nn.Module):
         )
 
     def forward(self, input_ids, attention_mask, image, avg_cal, group):
-        t = self.text(input_ids, attention_mask).pooler_output  # [B, text_dim]
-        i = self.image(image)                                    # [B, img_dim]
-        g = self.group_emb(group)                                 # [B, group_dim]
-        avg_cal = avg_cal.unsqueeze(1)                            # [B, 1]
+        t = self.text(input_ids, attention_mask).pooler_output  
+        i = self.image(image)                                    
+        g = self.group_emb(group)                                 
+        avg_cal = avg_cal.unsqueeze(1)                            
 
         if self.fusion_type == "concat":
             x = torch.cat([t, i, avg_cal, g], dim=1)
 
         elif self.fusion_type == "multiply":
             i_proj = self.i_proj(i)
-            x = t * i_proj  # Hadamard product
+            x = t * i_proj  
             x = torch.cat([x, avg_cal, g], dim=1)
 
         elif self.fusion_type == "cross_attention":
@@ -117,7 +89,7 @@ class MultimodalModel(nn.Module):
 
         out = self.head(x).squeeze(1)
 
-        # ===== CLIP ограничения =====
+        # ===== CLIP ограничения - то есть руками ограничиваем максимум на 100 г исходя из средней калорийности продуктов в реальной жизни=====
         for g_name, clip_val in {"meat": 600, "grain": 400, "vegetable": 150,
                                  "fruit": 200, "sauce": 30, "water": 0, "drink": 300}.items():
             mask = (group == GROUP2ID.get(g_name, -1))
