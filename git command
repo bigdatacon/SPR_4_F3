@@ -3,10 +3,10 @@ git status
 git remote add origin https://github.com/bigdatacon/SPR_4_F3.git
 git remote -v
 git remote -v
-git checkout -b s4_done_3
+git checkout -b s4_done_6
 git branch
 git add .
-git commit -m "достигнуто менее 50 на 10 эпохе "
-git push -u origin s4_done_3
+git commit -m "достигнуто 6 раз менее 50 на 10 эпохе "
+git push -u origin s4_done_6
 
 
