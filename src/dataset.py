@@ -46,13 +46,13 @@ GROUP2ID["other"] = len(GROUP2ID)
 
     
 def get_transforms(config, ds_type="train"):
-    cfg = timm.get_pretrained_cfg(config.IMAGE_MODEL_NAME)
+    # cfg = timm.get_pretrained_cfg(config.IMAGE_MODEL_NAME)
     if ds_type == "train":
         return A.Compose([
             A.Resize(224, 224),
 
-            A.RandomCrop(cfg.input_size[1], cfg.input_size[2]),  #добавил
-            A.ColorJitter(0.2,0.2,0.2,0.1),
+            # A.RandomCrop(cfg.input_size[1], cfg.input_size[2]),  #добавил
+            # A.ColorJitter(0.2,0.2,0.2,0.1),
 
             A.HorizontalFlip(p=0.5),
             A.ColorJitter(0.2, 0.2, 0.2, 0.1),
@@ -61,8 +61,8 @@ def get_transforms(config, ds_type="train"):
         ])
     else:
         return A.Compose([
-            A.SmallestMaxSize(max_size=max(cfg.input_size[1], cfg.input_size[2])),  #добавил
-            A.CenterCrop(cfg.input_size[1], cfg.input_size[2]),
+            # A.SmallestMaxSize(max_size=max(cfg.input_size[1], cfg.input_size[2])),  #добавил
+            # A.CenterCrop(cfg.input_size[1], cfg.input_size[2]),
 
             A.Resize(224, 224),
             A.Normalize(),
