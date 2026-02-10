@@ -1,0 +1,12 @@
+git init
+git status
+git remote add origin https://github.com/bigdatacon/SPR_4_F3.git
+git remote -v
+git remote -v
+git checkout -b s4_done_3
+git branch
+git add .
+git commit -m "Initial commit: multimodal dataset and model"
+git push -u origin s4_done_3
+
+

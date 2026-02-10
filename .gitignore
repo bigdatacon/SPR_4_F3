@@ -1,0 +1,37 @@
+# Виртуальные окружения Python
+.venv/
+venv/
+env/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# data files
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Виртуальные окружения Python
+.venv/
+venv/
+env/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# data files
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo.
